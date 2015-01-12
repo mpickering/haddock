@@ -108,7 +108,7 @@ executable haddock
       Haddock.GhcUtils
       Haddock.Convert
   else
-    build-depends:  haddock-api == 2.15.0.2
+    build-depends:  haddock-api == 3.15.0.2
 
 test-suite html-test
   type:             exitcode-stdio-1.0

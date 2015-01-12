@@ -38,6 +38,7 @@ import GHC
 import GHC.Exts
 import Name
 import BooleanFormula
+import Debug.Trace
 
 ppDecl :: Bool -> LinksInfo -> LHsDecl DocName
        -> DocForDecl DocName -> [DocInstance DocName] -> [(DocName, Fixity)]
@@ -663,7 +664,9 @@ ppSideBySideConstr subdocs fixities unicode qual (L _ con) = (decl, mbDoc, field
             : map (ppLParendType unicode qual) args)
           <+> fixity
 
-        RecCon _ -> header_ +++ ppBinder False occ <+> fixity
+        RecCon _ -> case (traceId . getOccString . unLoc . con_name $ con) of
+                      "" -> trace "hereh" noHtml
+                      _  -> header_ +++ ppBinder False occ <+> fixity
 
         InfixCon arg1 arg2 ->
           hsep [header_ +++ ppLParendType unicode qual arg1,

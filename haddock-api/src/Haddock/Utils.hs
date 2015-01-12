@@ -61,6 +61,7 @@ import Haddock.GhcUtils
 
 import GHC
 import Name
+import Unique
 
 import Control.Monad ( liftM )
 import Data.Char ( isAlpha, isAlphaNum, isAscii, ord, chr )
@@ -83,6 +84,8 @@ import qualified System.Posix.Internals
 #endif
 
 import MonadUtils ( MonadIO(..) )
+
+import Debug.Trace
 
 
 --------------------------------------------------------------------------------
@@ -144,24 +147,33 @@ restrictDataDefn names defn@(HsDataDefn { dd_ND = new_or_data, dd_cons = cons })
       _ -> error "Should not happen"
 
 restrictCons :: [Name] -> [LConDecl Name] -> [LConDecl Name]
-restrictCons names decls = [ L p d | L p (Just d) <- map (fmap keep) decls ]
+restrictCons names decls = trace "restrictCons" ([ L p d | L p (Just d) <- map (fmap keep) decls ])
   where
     keep d | unLoc (con_name d) `elem` names =
       case con_details d of
-        PrefixCon _ -> Just d
+        PrefixCon _ -> trace "Prefix" (Just d)
         RecCon fields
-          | all field_avail fields -> Just d
-          | otherwise -> Just (d { con_details = PrefixCon (field_types fields) })
+          | all field_avail fields -> trace "all" (Just d)
+          | otherwise ->
+              trace "Rec" (Just (d { con_details = RecCon (filter field_avail fields)}))
           -- if we have *all* the field names available, then
           -- keep the record declaration.  Otherwise degrade to
           -- a constructor declaration.  This isn't quite right, but
           -- it's the best we can do.
         InfixCon _ _ -> Just d
       where
-        field_avail (ConDeclField n _ _) = unLoc n `elem` names
         field_types flds = [ t | ConDeclField _ t _ <- flds ]
 
-    keep _ = Nothing
+    keep d =
+      case con_details d of
+        RecCon fields -> let  u       = getUnique (unLoc . con_name $ d)
+                              newOccName = mkOccName dataName ""
+                              newName    = mkSystemName u newOccName in
+                          trace "RecNoCon" (Just (d { con_name    = fmap (const newName) (con_name d)
+                                                    , con_details = RecCon (filter field_avail fields)}))
+        _ -> Nothing
+    field_avail (ConDeclField n _ _) = unLoc n `elem` names
+
 
 
 restrictDecls :: [Name] -> [LSig Name] -> [LSig Name]

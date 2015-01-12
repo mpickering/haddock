@@ -50,6 +50,7 @@ import Text.XHtml hiding ( name, title, p, quote )
 
 import FastString            ( unpackFS )
 import GHC
+import Debug.Trace
 
 
 --------------------------------------------------------------------------------
@@ -144,7 +145,9 @@ subTable _ [] = Nothing
 subTable qual decls = Just $ table << aboves (concatMap subRow decls)
   where
     subRow (decl, mdoc, subs) =
-      (td ! [theclass "src"] << decl
+      (if isNoHtml decl
+          then cell noHtml
+          else td ! [theclass "src"] << decl
        <->
        docElement td << fmap (docToHtml qual) mdoc)
       : map (cell . (td <<)) subs
