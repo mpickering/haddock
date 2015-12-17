@@ -42,8 +42,8 @@ enrich src =
 -- be replaced with interval tree data structure.
 type DetailsMap = [(GHC.SrcSpan, TokenDetails)]
 
-lookupBySpan :: Span -> DetailsMap -> Maybe TokenDetails
-lookupBySpan tspan = listToMaybe . map snd . filter (matches tspan . fst)
+lookupBySpan :: GHC.SrcSpan -> DetailsMap -> Maybe TokenDetails
+lookupBySpan = lookup
 
 enrichToken :: Token -> DetailsMap -> Maybe TokenDetails
 enrichToken (Token typ _ spn) dm
@@ -164,22 +164,3 @@ imports src@(_, imps, _, _) =
         let (GHC.L sspan name) = GHC.ideclName idecl
         in Just (sspan, RtkModule name)
     imp _ = Nothing
-
--- | Check whether token stream span matches GHC source span.
---
--- Currently, it is implemented as checking whether "our" span is contained
--- in GHC span. The reason for that is because GHC span are generally wider
--- and may spread across couple tokens. For example, @(>>=)@ consists of three
--- tokens: @(@, @>>=@, @)@, but GHC source span associated with @>>=@ variable
--- contains @(@ and @)@. Similarly, qualified identifiers like @Foo.Bar.quux@
--- are tokenized as @Foo@, @.@, @Bar@, @.@, @quux@ but GHC source span
--- associated with @quux@ contains all five elements.
-matches :: Span -> GHC.SrcSpan -> Bool
-matches tspan (GHC.RealSrcSpan aspan)
-    | saspan <= stspan && etspan <= easpan = True
-  where
-    stspan = (posRow . spStart $ tspan, posCol . spStart $ tspan)
-    etspan = (posRow . spEnd $ tspan, posCol . spEnd $ tspan)
-    saspan = (GHC.srcSpanStartLine aspan, GHC.srcSpanStartCol aspan)
-    easpan = (GHC.srcSpanEndLine aspan, GHC.srcSpanEndCol aspan)
-matches _ _ = False

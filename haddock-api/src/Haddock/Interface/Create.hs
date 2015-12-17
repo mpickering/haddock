@@ -861,7 +861,7 @@ mkMaybeTokenizedSrc :: [Flag] -> TypecheckedModule
 mkMaybeTokenizedSrc flags tm
     | Flag_HyperlinkedSource `elem` flags = case renamedSource tm of
         Just src -> do
-            tokens <- liftGhcToErrMsgGhc . liftIO $ mkTokenizedSrc summary src
+            tokens <- liftGhcToErrMsgGhc (mkTokenizedSrc summary src)
             return $ Just tokens
         Nothing -> do
             liftErrMsg . tell . pure $ concat
@@ -874,11 +874,12 @@ mkMaybeTokenizedSrc flags tm
   where
     summary = pm_mod_summary . tm_parsed_module $ tm
 
-mkTokenizedSrc :: ModSummary -> RenamedSource -> IO [RichToken]
-mkTokenizedSrc ms src =
-    Hyperlinker.enrich src . Hyperlinker.parse <$> rawSrc
-  where
-    rawSrc = readFile $ msHsFilePath ms
+mkTokenizedSrc :: ModSummary -> RenamedSource -> Ghc [RichToken]
+mkTokenizedSrc ms src = do
+    tokens <- getRichTokenStream (ms_mod ms)
+    return (Hyperlinker.enrich src (Hyperlinker.parse tokens))
+--  where
+--    rawSrc = readFile $ msHsFilePath ms
 
 -- | Find a stand-alone documentation comment by its name.
 findNamedDoc :: String -> [HsDecl Name] -> ErrMsgM (Maybe HsDocString)
