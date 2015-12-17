@@ -10,14 +10,8 @@ import qualified Data.Map as Map
 data Token = Token
     { tkType :: TokenType
     , tkValue :: String
-    , tkSpan :: GHC.SrcSpan
-    }
-
-spStart = GHC.srcSpanStart
-spEnd = GHC.srcSpanEnd
-
-posRow (GHC.RealSrcLoc rl) = GHC.srcLocLine rl
-posCol (GHC.RealSrcLoc rl) = GHC.srcLocCol rl
+    , tkSpan :: GHC.RealSrcSpan
+    } deriving (Show)
 
 data TokenType
     = TkIdentifier
