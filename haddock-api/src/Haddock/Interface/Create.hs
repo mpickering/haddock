@@ -127,7 +127,7 @@ createInterface tm flags modMap instIfaceMap = do
         mkAliasMap dflags $ tm_renamed_source tm
       modWarn = moduleWarning dflags gre warnings
 
-  tokenizedSrc <- mkMaybeTokenizedSrc flags tm
+  tokenizedSrc <- mkMaybeTokenizedSrc dflags flags tm
 
   return $! Interface {
     ifaceMod             = mdl
@@ -856,12 +856,12 @@ seqList :: [a] -> ()
 seqList [] = ()
 seqList (x : xs) = x `seq` seqList xs
 
-mkMaybeTokenizedSrc :: [Flag] -> TypecheckedModule
+mkMaybeTokenizedSrc :: DynFlags -> [Flag] -> TypecheckedModule
                     -> ErrMsgGhc (Maybe [RichToken])
-mkMaybeTokenizedSrc flags tm
+mkMaybeTokenizedSrc dflags flags tm
     | Flag_HyperlinkedSource `elem` flags = case renamedSource tm of
         Just src -> do
-            tokens <- liftGhcToErrMsgGhc (mkTokenizedSrc summary src)
+            tokens <- liftGhcToErrMsgGhc (liftIO (mkTokenizedSrc dflags summary src))
             return $ Just tokens
         Nothing -> do
             liftErrMsg . tell . pure $ concat
@@ -874,12 +874,11 @@ mkMaybeTokenizedSrc flags tm
   where
     summary = pm_mod_summary . tm_parsed_module $ tm
 
-mkTokenizedSrc :: ModSummary -> RenamedSource -> Ghc [RichToken]
-mkTokenizedSrc ms src = do
-    tokens <- getRichTokenStream (ms_mod ms)
-    return (Hyperlinker.enrich src (Hyperlinker.parse tokens))
---  where
---    rawSrc = readFile $ msHsFilePath ms
+mkTokenizedSrc :: DynFlags -> ModSummary -> RenamedSource -> IO [RichToken]
+mkTokenizedSrc dflags ms src =
+  Hyperlinker.enrich src . Hyperlinker.parse dflags <$> rawSrc
+  where
+    rawSrc = readFile $ msHsFilePath ms
 
 -- | Find a stand-alone documentation comment by its name.
 findNamedDoc :: String -> [HsDecl Name] -> ErrMsgM (Maybe HsDocString)
