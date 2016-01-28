@@ -58,9 +58,6 @@ import GHC hiding (verbosity)
 import HscTypes
 import FastString (unpackFS)
 
-import Pipes
-import Control.Monad.State
-
 -- | Create 'Interface's and a link environment by typechecking the list of
 -- modules using the GHC API and processing the resulting syntax trees.
 processModules
@@ -69,11 +66,11 @@ processModules
                                 -- module topology
   -> [Flag]                     -- ^ Command-line flags
   -> [InterfaceFile]            -- ^ Interface files of package dependencies
-  -> Producer' Interface (StateT LinkEnv Ghc) () -- ^ Resulting list of interfaces and renaming
+  -> Ghc ([Interface], LinkEnv) -- ^ Resulting list of interfaces and renaming
                                 -- environment
 processModules verbosity modules flags extIfaces = do
 
-  lift $ lift $ out verbosity verbose "Creating interfaces..."
+  out verbosity verbose "Creating interfaces..."
   let instIfaceMap =  Map.fromList [ (instMod iface, iface) | ext <- extIfaces
                                    , iface <- ifInstalledIfaces ext ]
   interfaces <- createIfaces0 verbosity modules flags instIfaceMap

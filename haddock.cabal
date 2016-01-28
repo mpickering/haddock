@@ -62,8 +62,7 @@ executable haddock
       ghc-boot,
       ghc >= 7.11 && < 8.1,
       bytestring,
-      transformers,
-      pipes
+      transformers
 
     other-modules:
       ResponseFile,
@@ -122,7 +121,6 @@ executable haddock
       Haddock.Options
       Haddock.GhcUtils
       Haddock.Syb
-      Haddock.Pipes
       Haddock.Convert
   else
     build-depends:  haddock-api == 2.16.*

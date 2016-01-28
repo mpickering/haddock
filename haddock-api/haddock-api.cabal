@@ -53,8 +53,6 @@ library
 
     , ghc-paths
     , haddock-library  >= 1.4
-    , pipes
-    , mtl
 
   hs-source-dirs:
       src
