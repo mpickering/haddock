@@ -18,6 +18,7 @@ import Data.Data
 import Data.Maybe
 import Data.Monoid
 import Control.Monad
+import qualified Data.Map.Strict as M
 import Prelude hiding (concat, foldr, head, tail, replicate)
 import qualified Data.List as List
 
@@ -30,7 +31,7 @@ enrich src =
         }
   where
     detailsMap :: OldDetailsMap
-    detailsMap = toList $ mconcat $ List.map ($ src)
+    detailsMap = M.fromList . toList $ mconcat $ List.map ($ src)
         [ variables
         , types
         , decls
@@ -47,10 +48,10 @@ enrich src =
 -- stuff because source locations are not ordered. In the future, this should
 -- be replaced with interval tree data structure.
 type DetailsMap = DList (GHC.SrcSpan, TokenDetails)
-type OldDetailsMap = [(GHC.SrcSpan, TokenDetails)]
+type OldDetailsMap = M.Map GHC.SrcSpan TokenDetails
 
 lookupBySpan :: GHC.SrcSpan -> OldDetailsMap -> Maybe TokenDetails
-lookupBySpan = lookup
+lookupBySpan = M.lookup
 
 enrichToken :: Token -> OldDetailsMap -> Maybe TokenDetails
 enrichToken (Token typ _ spn) dm
