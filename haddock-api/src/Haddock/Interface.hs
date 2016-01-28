@@ -1,3 +1,4 @@
+{-# LANGUAGE RankNTypes #-}
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  Haddock.Interface
@@ -58,6 +59,7 @@ import HscTypes
 import FastString (unpackFS)
 
 import Pipes
+import Control.Monad.State
 
 -- | Create 'Interface's and a link environment by typechecking the list of
 -- modules using the GHC API and processing the resulting syntax trees.
