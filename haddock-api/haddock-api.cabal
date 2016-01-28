@@ -53,6 +53,7 @@ library
 
     , ghc-paths
     , haddock-library == 1.2.*
+    , pipes
 
   hs-source-dirs:
       src

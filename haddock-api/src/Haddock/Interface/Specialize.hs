@@ -2,6 +2,8 @@
 {-# LANGUAGE Rank2Types #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE Strict #-}
 
 
 module Haddock.Interface.Specialize
@@ -34,7 +36,8 @@ specialize :: (Eq name, Typeable name)
            => Data a
            => name -> HsType name -> a -> a
 specialize name details =
-    everywhere $ mkT step
+    let !a = everywhere $ mkT step
+    in a
   where
     step (HsTyVar (L _ name')) | name == name' = details
     step typ = typ
