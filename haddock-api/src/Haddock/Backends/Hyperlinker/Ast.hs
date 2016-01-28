@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 
 
 module Haddock.Backends.Hyperlinker.Ast (enrich) where
@@ -15,7 +16,10 @@ import qualified GHC
 import Control.Applicative
 import Data.Data
 import Data.Maybe
-
+import Data.Monoid
+import Control.Monad
+import Prelude hiding (concat, foldr, head, tail, replicate)
+import qualified Data.List as List
 
 -- | Add more detailed information to token stream using GHC API.
 enrich :: GHC.RenamedSource -> [Token] -> [RichToken]
@@ -25,13 +29,15 @@ enrich src =
         , rtkDetails = enrichToken token detailsMap
         }
   where
-    detailsMap = concatMap ($ src)
+    detailsMap :: OldDetailsMap
+    detailsMap = toList $ mconcat $ List.map ($ src)
         [ variables
         , types
         , decls
         , binds
         , imports
         ]
+
 
 -- | A map containing association between source locations and "details" of
 -- this location.
@@ -40,12 +46,13 @@ enrich src =
 -- in such structure has linear complexity. We cannot use any hashmap-like
 -- stuff because source locations are not ordered. In the future, this should
 -- be replaced with interval tree data structure.
-type DetailsMap = [(GHC.SrcSpan, TokenDetails)]
+type DetailsMap = DList (GHC.SrcSpan, TokenDetails)
+type OldDetailsMap = [(GHC.SrcSpan, TokenDetails)]
 
-lookupBySpan :: GHC.SrcSpan -> DetailsMap -> Maybe TokenDetails
+lookupBySpan :: GHC.SrcSpan -> OldDetailsMap -> Maybe TokenDetails
 lookupBySpan = lookup
 
-enrichToken :: Token -> DetailsMap -> Maybe TokenDetails
+enrichToken :: Token -> OldDetailsMap -> Maybe TokenDetails
 enrichToken (Token typ _ spn) dm
     | typ `elem` [TkIdentifier, TkOperator] = lookupBySpan (GHC.RealSrcSpan spn) dm
 enrichToken _ _ = Nothing
@@ -93,7 +100,7 @@ binds =
         (Just (GHC.L sspan (GHC.VarPat name))) ->
             pure (sspan, RtkBind (GHC.unLoc name))
         (Just (GHC.L _ (GHC.ConPatIn (GHC.L sspan name) recs))) ->
-            [(sspan, RtkVar name)] ++ everything (<|>) rec recs
+            (sspan, RtkVar name) `cons` everything (<|>) rec recs
         (Just (GHC.L _ (GHC.AsPat (GHC.L sspan name) _))) ->
             pure (sspan, RtkBind name)
         _ -> empty
@@ -110,24 +117,24 @@ binds =
 
 -- | Obtain details map for top-level declarations.
 decls :: GHC.RenamedSource -> DetailsMap
-decls (group, _, _, _) = concatMap ($ group)
-    [ concat . map typ . concat . map GHC.group_tyclds . GHC.hs_tyclds
-    , everything (<|>) fun . GHC.hs_valds
-    , everything (<|>) (con `combine` ins)
+decls (group, _, _, _) = mconcat $ map ($ group)
+    [ mconcat . map typ . List.concat . map GHC.group_tyclds . GHC.hs_tyclds
+    ,   everything (<|>) fun . GHC.hs_valds
+    ,  everything (<|>) (con `combine` ins)
     ]
   where
     typ (GHC.L _ t) = case t of
         GHC.DataDecl name _ _ _ -> pure . decl $ name
         GHC.SynDecl name _ _ _ -> pure . decl $ name
         GHC.FamDecl fam -> pure . decl $ GHC.fdLName fam
-        GHC.ClassDecl{..} -> [decl tcdLName] ++ concatMap sig tcdSigs
+        GHC.ClassDecl{..} -> decl tcdLName `cons` fromList (concatMap sig tcdSigs)
     fun term = case cast term of
         (Just (GHC.FunBind (GHC.L sspan name) _ _ _ _ :: GHC.HsBind GHC.Name))
             | GHC.isExternalName name -> pure (sspan, RtkDecl name)
         _ -> empty
     con term = case cast term of
         (Just cdcl) ->
-            map decl (GHC.getConNames cdcl) ++ everything (<|>) fld cdcl
+            fromList (map decl (GHC.getConNames cdcl)) <|> everything (<|>) fld cdcl
         Nothing -> empty
     ins term = case cast term of
         (Just (GHC.DataFamInstD inst)) -> pure . tyref $ GHC.dfid_tycon inst
@@ -136,7 +143,7 @@ decls (group, _, _, _) = concatMap ($ group)
         _ -> empty
     fld term = case cast term of
         Just (field :: GHC.ConDeclField GHC.Name)
-          -> map (decl . fmap GHC.selectorFieldOcc) $ GHC.cd_fld_names field
+          -> fromList (map (decl . fmap GHC.selectorFieldOcc) $ GHC.cd_fld_names field)
         Nothing -> empty
     sig (GHC.L _ (GHC.TypeSig names _)) = map decl names
     sig _ = []
@@ -149,14 +156,14 @@ decls (group, _, _, _) = concatMap ($ group)
 -- import lists.
 imports :: GHC.RenamedSource -> DetailsMap
 imports src@(_, imps, _, _) =
-    everything (<|>) ie src ++ mapMaybe (imp . GHC.unLoc) imps
+    everything (<|>) ie src <> fromList (mapMaybe (imp . GHC.unLoc) imps)
   where
     ie term = case cast term of
         (Just (GHC.IEVar v)) -> pure $ var v
         (Just (GHC.IEThingAbs t)) -> pure $ typ t
         (Just (GHC.IEThingAll t)) -> pure $ typ t
         (Just (GHC.IEThingWith t _ vs _fls)) ->
-          [typ t] ++ map var vs
+          typ t `cons` fromList (map var vs)
         _ -> empty
     typ (GHC.L sspan name) = (sspan, RtkType name)
     var (GHC.L sspan name) = (sspan, RtkVar name)
@@ -164,3 +171,124 @@ imports src@(_, imps, _, _) =
         let (GHC.L sspan name) = GHC.ideclName idecl
         in Just (sspan, RtkModule name)
     imp _ = Nothing
+
+
+newtype DList a = DL { unDL :: [a] -> [a] }
+
+-- | Convert a list to a dlist
+fromList    :: [a] -> DList a
+fromList    = DL . (++)
+{-# INLINE fromList #-}
+
+-- | Convert a dlist to a list
+toList      :: DList a -> [a]
+toList      = ($[]) . unDL
+{-# INLINE toList #-}
+
+-- | Apply a dlist to a list to get the underlying list with an extension
+--
+-- > apply (fromList xs) ys = xs ++ ys
+apply       :: DList a -> [a] -> [a]
+apply       = unDL
+
+-- | Create a dlist containing no elements
+emptyD       :: DList a
+emptyD       = DL id
+{-# INLINE emptyD #-}
+
+-- | Create dlist with a single element
+singleton   :: a -> DList a
+singleton   = DL . (:)
+{-# INLINE singleton #-}
+
+-- | /O(1)/. Prepend a single element to a dlist
+infixr `cons`
+cons        :: a -> DList a -> DList a
+cons x xs   = DL ((x:) . unDL xs)
+{-# INLINE cons #-}
+
+-- | /O(1)/. Append a single element to a dlist
+infixl `snoc`
+snoc        :: DList a -> a -> DList a
+snoc xs x   = DL (unDL xs . (x:))
+{-# INLINE snoc #-}
+
+-- | /O(1)/. Append dlists
+append       :: DList a -> DList a -> DList a
+append xs ys = DL (unDL xs . unDL ys)
+{-# INLINE append #-}
+
+-- | /O(spine)/. Concatenate dlists
+concat       :: [DList a] -> DList a
+concat       = List.foldr append empty
+{-# INLINE concat #-}
+
+-- | /O(n)/. Create a dlist of the given number of elements
+replicate :: Int -> a -> DList a
+replicate n x = DL $ \xs -> let go m | m <= 0    = xs
+                                     | otherwise = x : go (m-1)
+                            in go n
+{-# INLINE replicate #-}
+
+-- | /O(n)/. List elimination for dlists
+list :: b -> (a -> DList a -> b) -> DList a -> b
+list nill consit dl =
+  case toList dl of
+    [] -> nill
+    (x : xs) -> consit x (fromList xs)
+
+-- | /O(n)/. Return the head of the dlist
+head :: DList a -> a
+head = list (error "Data.DList.head: empty dlist") const
+
+-- | /O(n)/. Return the tail of the dlist
+tail :: DList a -> DList a
+tail = list (error "Data.DList.tail: empty dlist") (flip const)
+
+-- | /O(n)/. Unfoldr for dlists
+unfoldr :: (b -> Maybe (a, b)) -> b -> DList a
+unfoldr pf b =
+  case pf b of
+    Nothing     -> empty
+    Just (a, b') -> cons a (unfoldr pf b')
+
+-- | /O(n)/. Foldr over difference lists
+foldr        :: (a -> b -> b) -> b -> DList a -> b
+foldr f b    = List.foldr f b . toList
+{-# INLINE foldr #-}
+
+-- | /O(n)/. Map over difference lists.
+mapD          :: (a -> b) -> DList a -> DList b
+mapD f        = foldr (cons . f) empty
+{-# INLINE mapD #-}
+
+instance Monoid (DList a) where
+    mempty  = emptyD
+    mappend = append
+
+instance Functor DList where
+    fmap = mapD
+    {-# INLINE fmap #-}
+
+instance Applicative DList where
+    pure  = return
+    (<*>) = ap
+
+instance Alternative DList where
+    empty = empty
+    (<|>) = append
+
+instance Monad DList where
+  m >>= k
+    -- = concat (toList (fmap k m))
+    -- = (concat . toList . fromList . List.map k . toList) m
+    -- = concat . List.map k . toList $ m
+    -- = List.foldr append empty . List.map k . toList $ m
+    -- = List.foldr (append . k) empty . toList $ m
+    = foldr (append . k) empty m
+  {-# INLINE (>>=) #-}
+
+  return x = singleton x
+  {-# INLINE return #-}
+
+  fail _   = empty
