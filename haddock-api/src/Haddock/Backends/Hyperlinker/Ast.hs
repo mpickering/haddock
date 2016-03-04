@@ -15,15 +15,19 @@ import qualified GHC
 import Control.Applicative
 import Data.Data
 import Data.Maybe
+import Debug.Trace
+import Data.Ord
+import Data.List
+import Data.Function
 
 
 -- | Add more detailed information to token stream using GHC API.
 enrich :: GHC.RenamedSource -> [Token] -> [RichToken]
-enrich src =
-    map $ \token -> RichToken
+enrich src xs =
+    map  (\token -> RichToken
         { rtkToken = token
         , rtkDetails = enrichToken token detailsMap
-        }
+        }) xs
   where
     detailsMap = concatMap ($ src)
         [ variables
@@ -32,6 +36,7 @@ enrich src =
         , binds
         , imports
         ]
+
 
 -- | A map containing association between source locations and "details" of
 -- this location.
@@ -136,10 +141,11 @@ decls (group, _, _, _) = concatMap ($ group)
         _ -> empty
     fld term = case cast term of
         Just (field :: GHC.ConDeclField GHC.Name)
-          -> map (decl . fmap GHC.selectorFieldOcc) $ GHC.cd_fld_names field
+          -> map (mkField . fmap GHC.selectorFieldOcc) $ GHC.cd_fld_names field
         Nothing -> empty
     sig (GHC.L _ (GHC.TypeSig names _)) = map decl names
     sig _ = []
+    mkField (GHC.L sspan name) = (sspan, RtkField name)
     decl (GHC.L sspan name) = (sspan, RtkDecl name)
     tyref (GHC.L sspan name) = (sspan, RtkType name)
 

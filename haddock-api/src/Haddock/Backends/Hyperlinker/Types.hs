@@ -2,6 +2,7 @@ module Haddock.Backends.Hyperlinker.Types where
 
 
 import qualified GHC
+import Outputable
 
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -11,17 +12,17 @@ data Token = Token
     { tkType :: TokenType
     , tkValue :: String
     , tkSpan :: Span
-    }
+    } deriving Show
 
 data Position = Position
     { posRow :: !Int
     , posCol :: !Int
-    }
+    } deriving Show
 
 data Span = Span
     { spStart :: Position
     , spEnd :: Position
-    }
+    } deriving Show
 
 data TokenType
     = TkIdentifier
@@ -43,15 +44,23 @@ data TokenType
 data RichToken = RichToken
     { rtkToken :: Token
     , rtkDetails :: Maybe TokenDetails
-    }
+    } deriving Show
 
 data TokenDetails
     = RtkVar GHC.Name
     | RtkType GHC.Name
     | RtkBind GHC.Name
     | RtkDecl GHC.Name
+    | RtkField GHC.Name
     | RtkModule GHC.ModuleName
-    deriving (Eq)
+    deriving (Eq, Show)
+
+instance Show GHC.ModuleName where
+  show mname = showSDocUnsafe (ppr mname)
+
+
+instance Show GHC.Name where
+  show mname = showSDocUnsafe (ppr mname)
 
 
 rtkName :: TokenDetails -> Either GHC.Name GHC.ModuleName
@@ -59,6 +68,7 @@ rtkName (RtkVar name) = Left name
 rtkName (RtkType name) = Left name
 rtkName (RtkBind name) = Left name
 rtkName (RtkDecl name) = Left name
+rtkName (RtkField name) = Left name
 rtkName (RtkModule name) = Right name
 
 
