@@ -60,7 +60,7 @@ instance Show GHC.ModuleName where
 
 
 instance Show GHC.Name where
-  show mname = showSDocUnsafe (ppr mname)
+  show name = showSDocUnsafe (ppr (GHC.nameModule name, name))
 
 
 rtkName :: TokenDetails -> Either GHC.Name GHC.ModuleName
