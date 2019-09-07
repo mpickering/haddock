@@ -187,6 +187,7 @@ richTokenStyle  _    TyDecl        = ["hs-type"]
 richTokenStyle  _    ClassTyDecl{} = ["hs-type"]
 richTokenStyle  _    Decl{}        = ["hs-var"]
 richTokenStyle  _    IEThing{}     = []  -- could be either a value or type
+richTokenStyle  _ _ = []
 
 tokenStyle :: TokenType -> [StyleClass]
 tokenStyle TkIdentifier = ["hs-identifier"]
